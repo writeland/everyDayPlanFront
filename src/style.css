@@ -115,6 +115,12 @@ main { width: min(1440px, calc(100% - 220px)); padding: 20px clamp(24px, 3.2vw, 
 .stats .stat-icon-gold { background: #fff3d8; color: #d49e30; }
 .stats strong { display: block; margin-top: 4px; font-size: 26px; line-height: 1; color: #3f6633; }
 .content { margin-top: 24px; }
+/* 收紧文字层级，避免标题和操作按钮显得过大。 */
+.hero h1 { font-size: clamp(24px, 1.8vw, 30px); }
+.brand { font-size: 20px; }
+h2 { font-size: 19px; }
+.outline, .primary, .filters button, .actions button { font-size: 13px; }
+.stats strong { font-size: 23px; }
 .section-heading .muted { margin: 5px 0 0; }
 .filters { margin-top: 12px; }
 .filters button { padding: 6px 13px; }
@@ -124,6 +130,11 @@ main { width: min(1440px, calc(100% - 220px)); padding: 20px clamp(24px, 3.2vw, 
 .item-completed .done { color: #798b74; }
 .empty { padding: 35px 10px; }
 footer { margin-top: 12px; padding: 12px 0 0; }
+/* 分页固定在列表下方，不占用列表滚动区域。 */
+.pagination { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 2px 2px; color: #829383; font-size: 12px; }
+.pagination-controls { display: flex; align-items: center; gap: 10px; }
+.pagination button { padding: 5px 10px; border: 1px solid #e1e9df; border-radius: 7px; background: white; color: #567261; font-size: 12px; }
+.pagination button:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-height: 760px) and (min-width: 751px) {
   .sidebar { padding-top: 22px; padding-bottom: 22px; }
   .side-label { margin-top: 35px; }

@@ -2,10 +2,10 @@
 export interface Entry {
   id: number
   title: string
-  note: string
+  note: string | null
   date: string
   reminderTime: string | null
   done: boolean
 }
 
-export type EntryInput = Omit<Entry, 'id'>
+export type EntryInput = Omit<Entry, 'id' | 'note'> & { note: string }

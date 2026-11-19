@@ -1,5 +1,10 @@
 import { request } from '../utils/request'
 import type { Checkin } from '../types/checkin'
+import type { PageResult } from '../types/page'
+
+export function listCheckinPage(params: { page: number; size: number; date?: string }) {
+  return request<PageResult<Checkin>>({ url: '/checkins/page', method: 'get', params })
+}
 
 // 查询打卡历史，按需传入日期（yyyy-MM-dd）。
 export function listCheckins(date?: string) {

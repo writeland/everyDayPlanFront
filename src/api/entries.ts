@@ -1,5 +1,10 @@
 import { request } from '../utils/request'
 import type { Entry, EntryInput } from '../types/entry'
+import type { PageResult } from '../types/page'
+
+export function listEntryPage(params: { page: number; size: number; date?: string; done?: boolean }) {
+  return request<PageResult<Entry>>({ url: '/entries/page', method: 'get', params })
+}
 
 // 查询全部日程。
 export function listEntries() {

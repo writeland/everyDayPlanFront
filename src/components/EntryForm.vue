@@ -11,7 +11,7 @@ const saving = ref(false)
 const error = ref('')
 const form = reactive<EntryInput>(props.entry ? {
   title: props.entry.title,
-  note: props.entry.note,
+  note: props.entry.note ?? '',
   date: props.entry.date,
   reminderTime: props.entry.reminderTime?.slice(0, 5) || null,
   done: props.entry.done,

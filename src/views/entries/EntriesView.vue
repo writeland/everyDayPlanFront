@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { deleteEntry } from '../../api/entries'
-import { setEntryDone } from '../../api/checkins'
+import { computed, ref, watch } from 'vue'
+import { deleteEntry, listEntryPage } from '../../api/entries'
+import { setEntryDone, listCheckinPage } from '../../api/checkins'
 import type { Entry } from '../../types/entry'
+import type { Checkin } from '../../types/checkin'
 import EntryForm from '../../components/EntryForm.vue'
 import { useEntries } from '../../composables/useEntries'
 import { today } from '../../utils/date'
@@ -17,32 +18,69 @@ const filters: { value: Filter; label: string }[] = [
 const filter = ref<Filter>('all')
 const showForm = ref(false)
 const editing = ref<Entry>()
-const { entries, checkins, error, refresh } = useEntries()
+const { entries, error, refresh } = useEntries()
 // 根据共享日程计算今日数量、完成数和进度。
 const todayEntries = computed(() => entries.value.filter(entry => entry.date === today()))
 const completed = computed(() => todayEntries.value.filter(entry => entry.done).length)
 const progress = computed(() => todayEntries.value.length ? Math.round(completed.value / todayEntries.value.length * 100) : 0)
-// 根据当前页面范围和筛选条件生成要展示的日程。
-const visibleEntries = computed(() => {
-  const list = props.todayOnly ? todayEntries.value : entries.value
-  if (filter.value === 'pending') return list.filter(entry => !entry.done)
-  if (filter.value === 'done') return list.filter(entry => entry.done)
-  return list
-})
+// 列表在数据库中先筛选再分页；统计与提醒继续使用共享日程数据。
+const pageSize = 4
+const currentPage = ref(1)
+const totalItems = ref(0)
+const pageEntries = ref<Entry[]>([])
+const pageCheckins = ref<Checkin[]>([])
+const loading = ref(false)
+const pageError = ref('')
+let requestNumber = 0
+const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / pageSize)))
+async function loadPage() {
+  const number = ++requestNumber
+  loading.value = true
+  pageError.value = ''
+  try {
+    if (filter.value === 'history') {
+      const result = await listCheckinPage({ page: currentPage.value, size: pageSize })
+      if (number !== requestNumber) return
+      pageCheckins.value = result.items
+      totalItems.value = result.total
+    } else {
+      const result = await listEntryPage({
+        page: currentPage.value, size: pageSize,
+        date: props.todayOnly ? today() : undefined,
+        done: filter.value === 'all' ? undefined : filter.value === 'done',
+      })
+      if (number !== requestNumber) return
+      pageEntries.value = result.items
+      totalItems.value = result.total
+    }
+    if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
+  } catch (cause) {
+    if (number === requestNumber) {
+      pageEntries.value = []
+      pageCheckins.value = []
+      totalItems.value = 0
+      pageError.value = cause instanceof Error ? cause.message : '读取分页列表失败，请重试。'
+    }
+  } finally {
+    if (number === requestNumber) loading.value = false
+  }
+}
+watch(filter, () => { currentPage.value = 1 }, { flush: 'sync' })
+watch([filter, currentPage], loadPage, { immediate: true })
 const dateLabel = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'full' }).format(new Date())
 
 // 打开新建或编辑弹窗；保存成功后关闭并重新读取列表。
 function openForm(entry?: Entry) { editing.value = entry; showForm.value = true }
-async function saved() { showForm.value = false; await refresh() }
+async function saved() { showForm.value = false; await refresh(); await loadPage() }
 // 切换日程完成状态，并重新读取后端数据。
 async function toggle(entry: Entry) {
-  try { await setEntryDone(entry.id, !entry.done); await refresh() }
+  try { await setEntryDone(entry.id, !entry.done); await refresh(); await loadPage() }
   catch { error.value = '更新状态失败，请重试。' }
 }
 // 确认后删除日程；历史打卡记录由后端保留。
 async function remove(entry: Entry) {
   if (!confirm('确定删除这条日程吗？打卡历史会保留。')) return
-  try { await deleteEntry(entry.id); await refresh() }
+  try { await deleteEntry(entry.id); await refresh(); await loadPage() }
   catch { error.value = '删除失败，请重试。' }
 }
 </script>
@@ -72,15 +110,18 @@ async function remove(entry: Entry) {
     </div>
     <p v-if="filter === 'history'" class="history-hint">打卡历史记录实际完成的时间；取消完成或删除日程后仍保留。</p>
     <!-- 历史打卡和当前日程分别展示，避免混淆状态与历史事件。 -->
-    <div v-if="filter === 'history'" class="list">
-      <article v-for="record in checkins" :key="record.id" class="item">
+    <div v-if="pageError" class="list">
+      <div class="empty" role="alert">{{ pageError }} <button type="button" @click="loadPage">重试</button></div>
+    </div>
+    <div v-else-if="filter === 'history'" class="list">
+      <article v-for="record in loading ? [] : pageCheckins" :key="record.id" class="item">
         <span class="history-mark">✓</span>
         <div><strong>{{ record.entryTitle }}</strong><p class="meta">打卡时间 {{ record.checkedAt?.replace('T', ' ').slice(0, 16) }}</p></div>
       </article>
-      <div v-if="!checkins.length" class="empty">还没有打卡记录，完成一项日程后会出现在这里。</div>
+      <div v-if="!loading && !totalItems" class="empty">还没有打卡记录，完成一项日程后会出现在这里。</div>
     </div>
     <div v-else class="list">
-      <article v-for="entry in visibleEntries" :key="entry.id" class="item" :class="{ 'item-completed': entry.done }">
+      <article v-for="entry in loading ? [] : pageEntries" :key="entry.id" class="item" :class="{ 'item-completed': entry.done }">
         <input class="check" type="checkbox" :checked="entry.done" :aria-label="`${entry.done ? '恢复未完成' : '完成'}：${entry.title}`" @change="toggle(entry)" />
         <div class="item-body">
           <strong :class="{ done: entry.done }">{{ entry.title }}</strong>
@@ -89,7 +130,16 @@ async function remove(entry: Entry) {
         </div>
         <div class="actions"><button @click="openForm(entry)">编辑</button><button @click="remove(entry)">删除</button></div>
       </article>
-      <div v-if="!visibleEntries.length" class="empty">这里还没有符合条件的日程。</div>
+      <div v-if="!loading && !totalItems" class="empty">这里还没有符合条件的日程。</div>
+    </div>
+    <!-- 分页器始终展示当前筛选的总数和页码。 -->
+    <div v-if="!pageError && totalItems > 0" class="pagination" role="navigation" aria-label="列表分页">
+      <span>共 {{ totalItems }} 条 · 每页 {{ pageSize }} 条</span>
+      <div class="pagination-controls">
+        <button type="button" :disabled="loading || currentPage === 1" @click="currentPage--">上一页</button>
+        <span aria-live="polite">{{ currentPage }} / {{ totalPages }}</span>
+        <button type="button" :disabled="loading || currentPage >= totalPages" @click="currentPage++">下一页</button>
+      </div>
     </div>
   </section>
   <!-- 新建和编辑共用同一个表单组件。 -->
